@@ -14,6 +14,11 @@ let React;
 let ReactNoop;
 let Scheduler;
 
+// Copied from ReactFiberLanes. Don't do this!
+// This is hard coded directly to avoid needing to import, and
+// we'll remove this as we replace runWithPriority with React APIs.
+const InputContinuousLanePriority = 12;
+
 describe('ReactIncrementalUpdates', () => {
   beforeEach(() => {
     jest.resetModuleRegistry();
@@ -516,11 +521,14 @@ describe('ReactIncrementalUpdates', () => {
         Scheduler.unstable_yieldValue('Committed: ' + log);
         if (log === 'B') {
           // Right after B commits, schedule additional updates.
-          Scheduler.unstable_runWithPriority(
-            Scheduler.unstable_UserBlockingPriority,
-            () => {
-              pushToLog('C');
-            },
+          // TODO: Double wrapping is temporary while we remove Scheduler runWithPriority.
+          ReactNoop.unstable_runWithPriority(InputContinuousLanePriority, () =>
+            Scheduler.unstable_runWithPriority(
+              Scheduler.unstable_UserBlockingPriority,
+              () => {
+                pushToLog('C');
+              },
+            ),
           );
           setLog(prevLog => prevLog + 'D');
         }
@@ -538,11 +546,15 @@ describe('ReactIncrementalUpdates', () => {
 
     await ReactNoop.act(async () => {
       pushToLog('A');
-      Scheduler.unstable_runWithPriority(
-        Scheduler.unstable_UserBlockingPriority,
-        () => {
-          pushToLog('B');
-        },
+
+      // TODO: Double wrapping is temporary while we remove Scheduler runWithPriority.
+      ReactNoop.unstable_runWithPriority(InputContinuousLanePriority, () =>
+        Scheduler.unstable_runWithPriority(
+          Scheduler.unstable_UserBlockingPriority,
+          () => {
+            pushToLog('B');
+          },
+        ),
       );
     });
     expect(Scheduler).toHaveYielded([
@@ -574,11 +586,14 @@ describe('ReactIncrementalUpdates', () => {
         Scheduler.unstable_yieldValue('Committed: ' + this.state.log);
         if (this.state.log === 'B') {
           // Right after B commits, schedule additional updates.
-          Scheduler.unstable_runWithPriority(
-            Scheduler.unstable_UserBlockingPriority,
-            () => {
-              this.pushToLog('C');
-            },
+          // TODO: Double wrapping is temporary while we remove Scheduler runWithPriority.
+          ReactNoop.unstable_runWithPriority(InputContinuousLanePriority, () =>
+            Scheduler.unstable_runWithPriority(
+              Scheduler.unstable_UserBlockingPriority,
+              () => {
+                this.pushToLog('C');
+              },
+            ),
           );
           this.pushToLog('D');
         }
@@ -598,11 +613,14 @@ describe('ReactIncrementalUpdates', () => {
 
     await ReactNoop.act(async () => {
       pushToLog('A');
-      Scheduler.unstable_runWithPriority(
-        Scheduler.unstable_UserBlockingPriority,
-        () => {
-          pushToLog('B');
-        },
+      // TODO: Double wrapping is temporary while we remove Scheduler runWithPriority.
+      ReactNoop.unstable_runWithPriority(InputContinuousLanePriority, () =>
+        Scheduler.unstable_runWithPriority(
+          Scheduler.unstable_UserBlockingPriority,
+          () => {
+            pushToLog('B');
+          },
+        ),
       );
     });
     expect(Scheduler).toHaveYielded([

@@ -7,12 +7,13 @@
  * @flow
  */
 
-import type {AnyNativeEvent} from '../legacy-events/PluginModuleType';
+import type {AnyNativeEvent} from '../events/PluginModuleType';
 import type {Container, SuspenseInstance} from '../client/ReactDOMHostConfig';
-import type {DOMTopLevelEventType} from '../legacy-events/TopLevelEventTypes';
+import type {DOMTopLevelEventType} from '../events/TopLevelEventTypes';
 import type {ElementListenerMap} from '../client/ReactDOMComponentTree';
 import type {EventSystemFlags} from './EventSystemFlags';
 import type {FiberRoot} from 'react-reconciler/src/ReactInternalTypes';
+import type {LanePriority} from 'react-reconciler/src/ReactFiberLane';
 
 import {
   enableDeprecatedFlareAPI,
@@ -35,7 +36,7 @@ import {
   getClosestInstanceFromNode,
   getEventListenerMap,
 } from '../client/ReactDOMComponentTree';
-import {unsafeCastDOMTopLevelTypeToString} from '../legacy-events/TopLevelEventTypes';
+import {unsafeCastDOMTopLevelTypeToString} from '../events/TopLevelEventTypes';
 import {HostRoot, SuspenseComponent} from 'react-reconciler/src/ReactWorkTags';
 
 let attemptSynchronousHydration: (fiber: Object) => void;
@@ -62,6 +63,20 @@ export function setAttemptHydrationAtCurrentPriority(
   fn: (fiber: Object) => void,
 ) {
   attemptHydrationAtCurrentPriority = fn;
+}
+
+let getCurrentUpdatePriority: () => LanePriority;
+
+export function setGetCurrentUpdatePriority(fn: () => LanePriority) {
+  getCurrentUpdatePriority = fn;
+}
+
+let attemptHydrationAtPriority: <T>(priority: LanePriority, fn: () => T) => T;
+
+export function setAttemptHydrationAtPriority(
+  fn: <T>(priority: LanePriority, fn: () => T) => T,
+) {
+  attemptHydrationAtPriority = fn;
 }
 
 // TODO: Upgrade this definition once we're on a newer version of Flow that
@@ -111,11 +126,14 @@ import {
   TOP_POINTER_OUT,
   TOP_GOT_POINTER_CAPTURE,
   TOP_LOST_POINTER_CAPTURE,
-  TOP_FOCUS,
-  TOP_BLUR,
+  TOP_FOCUS_IN,
+  TOP_FOCUS_OUT,
 } from './DOMTopLevelEventTypes';
 import {IS_REPLAYED, PLUGIN_EVENT_SYSTEM} from './EventSystemFlags';
-import {listenToTopLevelEvent} from './DOMModernPluginEventSystem';
+import {
+  listenToNativeEvent,
+  capturePhaseEvents,
+} from './DOMModernPluginEventSystem';
 import {addResponderEventSystemEvent} from './DeprecatedDOMEventResponderSystem';
 
 type QueuedReplayableEvent = {|
@@ -147,6 +165,7 @@ type QueuedHydrationTarget = {|
   blockedOn: null | Container | SuspenseInstance,
   target: Node,
   priority: number,
+  lanePriority: LanePriority,
 |};
 const queuedExplicitHydrationTargets: Array<QueuedHydrationTarget> = [];
 
@@ -192,10 +211,10 @@ const discreteReplayableEvents = [
 ];
 
 const continuousReplayableEvents = [
-  TOP_FOCUS,
-  TOP_BLUR,
   TOP_DRAG_ENTER,
   TOP_DRAG_LEAVE,
+  TOP_FOCUS_IN,
+  TOP_FOCUS_OUT,
   TOP_MOUSE_OVER,
   TOP_MOUSE_OUT,
   TOP_POINTER_OVER,
@@ -215,11 +234,13 @@ function trapReplayableEventForContainer(
   container: Container,
   listenerMap: ElementListenerMap,
 ) {
-  listenToTopLevelEvent(
+  const capture = capturePhaseEvents.has(topLevelType);
+  listenToNativeEvent(
     topLevelType,
     ((container: any): Element),
     listenerMap,
     PLUGIN_EVENT_SYSTEM,
+    capture,
   );
 }
 
@@ -336,8 +357,8 @@ export function clearIfContinuousEvent(
   nativeEvent: AnyNativeEvent,
 ): void {
   switch (topLevelType) {
-    case TOP_FOCUS:
-    case TOP_BLUR:
+    case TOP_FOCUS_IN:
+    case TOP_FOCUS_OUT:
       queuedFocus = null;
       break;
     case TOP_DRAG_ENTER:
@@ -417,7 +438,7 @@ export function queueIfContinuousEvent(
   // moved from outside the window (no target) onto the target once it hydrates.
   // Instead of mutating we could clone the event.
   switch (topLevelType) {
-    case TOP_FOCUS: {
+    case TOP_FOCUS_IN: {
       const focusEvent = ((nativeEvent: any): FocusEvent);
       queuedFocus = accumulateOrCreateContinuousQueuedReplayableEvent(
         queuedFocus,
@@ -507,9 +528,12 @@ function attemptExplicitHydrationTarget(
           // We're blocked on hydrating this boundary.
           // Increase its priority.
           queuedTarget.blockedOn = instance;
-          runWithPriority(queuedTarget.priority, () => {
-            attemptHydrationAtCurrentPriority(nearestMounted);
+          attemptHydrationAtPriority(queuedTarget.lanePriority, () => {
+            runWithPriority(queuedTarget.priority, () => {
+              attemptHydrationAtCurrentPriority(nearestMounted);
+            });
           });
+
           return;
         }
       } else if (tag === HostRoot) {
@@ -528,15 +552,17 @@ function attemptExplicitHydrationTarget(
 
 export function queueExplicitHydrationTarget(target: Node): void {
   if (enableSelectiveHydration) {
-    const priority = getCurrentPriorityLevel();
+    const schedulerPriority = getCurrentPriorityLevel();
+    const updateLanePriority = getCurrentUpdatePriority();
     const queuedTarget: QueuedHydrationTarget = {
       blockedOn: null,
       target: target,
-      priority: priority,
+      priority: schedulerPriority,
+      lanePriority: updateLanePriority,
     };
     let i = 0;
     for (; i < queuedExplicitHydrationTargets.length; i++) {
-      if (priority <= queuedExplicitHydrationTargets[i].priority) {
+      if (schedulerPriority <= queuedExplicitHydrationTargets[i].priority) {
         break;
       }
     }

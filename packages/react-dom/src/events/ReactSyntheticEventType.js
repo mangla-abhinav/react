@@ -19,30 +19,15 @@ export type DispatchConfig = {|
     captured: null | string,
   |},
   registrationName?: string,
-  eventPriority: EventPriority,
-|};
-
-export type CustomDispatchConfig = {|
-  phasedRegistrationNames: {|
-    bubbled: null,
-    captured: null,
-  |},
-  registrationName?: string,
-  customEvent: true,
+  eventPriority?: EventPriority,
 |};
 
 export type ReactSyntheticEvent = {|
-  dispatchConfig: DispatchConfig | CustomDispatchConfig,
-  getPooled: (
-    dispatchConfig: DispatchConfig | CustomDispatchConfig,
-    targetInst: Fiber,
-    nativeTarget: Event,
-    nativeEventTarget: EventTarget,
-  ) => ReactSyntheticEvent,
   isPersistent: () => boolean,
   isPropagationStopped: () => boolean,
   _dispatchInstances?: null | Array<Fiber | null> | Fiber,
   _dispatchListeners?: null | Array<Function> | Function,
+  _reactName: string,
   _targetInst: Fiber,
   type: string,
   currentTarget: null | EventTarget,

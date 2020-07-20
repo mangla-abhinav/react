@@ -3,13 +3,12 @@
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
+ *
+ * @flow
  */
 
-import SyntheticEvent from '../events/SyntheticEvent';
+export type AnyNativeEvent = Event | KeyboardEvent | MouseEvent | TouchEvent;
 
-const SyntheticUIEvent = SyntheticEvent.extend({
-  view: null,
-  detail: null,
-});
+export type PluginName = string;
 
-export default SyntheticUIEvent;
+export type EventSystemFlags = number;

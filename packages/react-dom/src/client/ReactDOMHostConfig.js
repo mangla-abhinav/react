@@ -7,7 +7,7 @@
  * @flow
  */
 
-import type {TopLevelType} from '../legacy-events/TopLevelEventTypes';
+import type {TopLevelType} from '../events/TopLevelEventTypes';
 import type {Fiber, FiberRoot} from 'react-reconciler/src/ReactInternalTypes';
 import type {
   BoundingRect,
@@ -80,10 +80,7 @@ import {
 } from 'shared/ReactFeatureFlags';
 import {HostComponent, HostText} from 'react-reconciler/src/ReactWorkTags';
 import {TOP_BEFORE_BLUR, TOP_AFTER_BLUR} from '../events/DOMTopLevelEventTypes';
-import {
-  listenToEvent,
-  clearEventHandleListenersForTarget,
-} from '../events/DOMModernPluginEventSystem';
+import {listenToReactEvent} from '../events/DOMModernPluginEventSystem';
 
 export type Type = string;
 export type Props = {
@@ -531,14 +528,6 @@ function dispatchAfterDetachedBlur(target: HTMLElement): void {
     (event: any).relatedTarget = target;
     // Dispatch the event on the document.
     document.dispatchEvent(event);
-  }
-}
-
-export function removeInstanceEventHandles(
-  instance: Instance | TextInstance | SuspenseInstance,
-) {
-  if (enableCreateEventHandleAPI) {
-    clearEventHandleListenersForTarget(instance);
   }
 }
 
@@ -1122,7 +1111,7 @@ export function makeOpaqueHydratingObject(
 }
 
 export function preparePortalMount(portalInstance: Instance): void {
-  listenToEvent('onMouseEnter', portalInstance);
+  listenToReactEvent('onMouseEnter', portalInstance);
 }
 
 export function prepareScopeUpdate(
@@ -1131,14 +1120,6 @@ export function prepareScopeUpdate(
 ): void {
   if (enableScopeAPI) {
     precacheFiberNode(internalInstanceHandle, scopeInstance);
-  }
-}
-
-export function removeScopeEventHandles(
-  scopeInstance: ReactScopeInstance,
-): void {
-  if (enableScopeAPI && enableCreateEventHandleAPI) {
-    clearEventHandleListenersForTarget(scopeInstance);
   }
 }
 

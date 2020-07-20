@@ -367,7 +367,14 @@ describe('ReactDOMServerPartialHydration', () => {
     const span2 = container.getElementsByTagName('span')[0];
     // This is a new node.
     expect(span).not.toBe(span2);
-    expect(ref.current).toBe(span2);
+
+    if (gate(flags => flags.new)) {
+      // The effects list refactor causes this to be null because the Suspense Offscreen's child
+      // is null. However, since we can't hydrate Suspense in legacy this change in behavior is ok
+      expect(ref.current).toBe(null);
+    } else {
+      expect(ref.current).toBe(span2);
+    }
 
     // Resolving the promise should render the final content.
     suspend = false;
@@ -2895,6 +2902,89 @@ describe('ReactDOMServerPartialHydration', () => {
 
     // Now we're hydrated.
     expect(ref.current).not.toBe(null);
+  });
+
+  // @gate experimental
+  it('regression test: does not overfire non-bubbling browser events', async () => {
+    let suspend = false;
+    let resolve;
+    const promise = new Promise(resolvePromise => (resolve = resolvePromise));
+
+    function Sibling({text}) {
+      if (suspend) {
+        throw promise;
+      } else {
+        return 'Hello';
+      }
+    }
+
+    let submits = 0;
+
+    function Form() {
+      const [submitted, setSubmitted] = React.useState(false);
+      if (submitted) {
+        return null;
+      }
+      return (
+        <form
+          onSubmit={() => {
+            setSubmitted(true);
+            submits++;
+          }}>
+          Click me
+        </form>
+      );
+    }
+
+    function App() {
+      return (
+        <div>
+          <Suspense fallback="Loading...">
+            <Form />
+            <Sibling />
+          </Suspense>
+        </div>
+      );
+    }
+
+    suspend = false;
+    const finalHTML = ReactDOMServer.renderToString(<App />);
+    const container = document.createElement('div');
+    container.innerHTML = finalHTML;
+
+    // We need this to be in the document since we'll dispatch events on it.
+    document.body.appendChild(container);
+
+    const form = container.getElementsByTagName('form')[0];
+
+    // On the client we don't have all data yet but we want to start
+    // hydrating anyway.
+    suspend = true;
+    const root = ReactDOM.createRoot(container, {hydrate: true});
+    root.render(<App />);
+    Scheduler.unstable_flushAll();
+    jest.runAllTimers();
+
+    expect(container.textContent).toBe('Click meHello');
+
+    // We're now partially hydrated.
+    form.dispatchEvent(
+      new Event('submit', {
+        bubbles: true,
+      }),
+    );
+    expect(submits).toBe(0);
+
+    // Resolving the promise so that rendering can complete.
+    suspend = false;
+    resolve();
+    await promise;
+
+    Scheduler.unstable_flushAll();
+    jest.runAllTimers();
+    expect(submits).toBe(1);
+    expect(container.textContent).toBe('Hello');
+    document.body.removeChild(container);
   });
 
   // This test fails, in both forks. Without a boundary, the deferred tree won't

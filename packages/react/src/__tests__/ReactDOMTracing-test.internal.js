@@ -23,6 +23,11 @@ let onWorkScheduled;
 let onWorkStarted;
 let onWorkStopped;
 
+// Copied from ReactFiberLanes. Don't do this!
+// This is hard coded directly to avoid needing to import, and
+// we'll remove this as we replace runWithPriority with React APIs.
+const IdleLanePriority = 2;
+
 function loadModules() {
   ReactFeatureFlags = require('shared/ReactFeatureFlags');
 
@@ -232,9 +237,12 @@ describe('ReactDOMTracing', () => {
               Scheduler.unstable_yieldValue('Child:update');
             } else {
               Scheduler.unstable_yieldValue('Child:mount');
-              Scheduler.unstable_runWithPriority(
-                Scheduler.unstable_IdlePriority,
-                () => setDidMount(true),
+              // TODO: Double wrapping is temporary while we remove Scheduler runWithPriority.
+              ReactDOM.unstable_runWithPriority(IdleLanePriority, () =>
+                Scheduler.unstable_runWithPriority(
+                  Scheduler.unstable_IdlePriority,
+                  () => setDidMount(true),
+                ),
               );
             }
           }, [didMount]);

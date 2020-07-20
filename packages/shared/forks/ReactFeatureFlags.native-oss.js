@@ -12,6 +12,8 @@ import typeof * as ExportsType from './ReactFeatureFlags.native-oss';
 
 export const debugRenderPhaseSideEffectsForStrictMode = false;
 export const enableDebugTracing = false;
+export const enableSchedulingProfiler = false;
+export const enableSchedulingProfilerComponentStacks = false;
 export const replayFailedUnitOfWorkWithInvokeGuardedCallback = __DEV__;
 export const warnAboutDeprecatedLifecycles = true;
 export const enableProfilerTimer = __PROFILE__;
@@ -45,6 +47,7 @@ export const enableFilterEmptyStringAttributesDOM = false;
 
 export const enableNewReconciler = false;
 export const deferRenderPhaseUpdateToNextBatch = true;
+export const decoupleUpdatePriorityFromScheduler = false;
 
 // Flow magic to verify the exports of this file match the original version.
 // eslint-disable-next-line no-unused-vars

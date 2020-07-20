@@ -7,7 +7,13 @@
  * @flow
  */
 
-import {registrationNameModules} from '../legacy-events/EventPluginRegistry';
+import type {ElementListenerMapEntry} from '../client/ReactDOMComponentTree';
+
+import {
+  registrationNameDependencies,
+  possibleRegistrationNames,
+} from '../events/EventRegistry';
+
 import {canUseDOM} from 'shared/ExecutionEnvironment';
 import invariant from 'shared/invariant';
 import {
@@ -79,7 +85,7 @@ import {
   enableDeprecatedFlareAPI,
   enableTrustedTypesIntegration,
 } from 'shared/ReactFeatureFlags';
-import {listenToEvent} from '../events/DOMModernPluginEventSystem';
+import {listenToReactEvent} from '../events/DOMModernPluginEventSystem';
 import {getEventListenerMap} from './ReactDOMComponentTree';
 
 let didWarnInvalidHydration = false;
@@ -129,7 +135,10 @@ if (__DEV__) {
   validatePropertiesInDevelopment = function(type, props) {
     validateARIAProperties(type, props);
     validateInputProperties(type, props);
-    validateUnknownProperties(type, props, /* canUseEventSystem */ true);
+    validateUnknownProperties(type, props, {
+      registrationNameDependencies,
+      possibleRegistrationNames,
+    });
   };
 
   // IE 11 parses & normalizes the style attribute as opposed to other
@@ -256,7 +265,7 @@ if (__DEV__) {
 
 export function ensureListeningTo(
   rootContainerInstance: Element | Node,
-  registrationName: string,
+  reactPropEvent: string,
 ): void {
   // If we have a comment node, then use the parent node,
   // which should be an element.
@@ -273,7 +282,7 @@ export function ensureListeningTo(
     'ensureListeningTo(): received a container that was not an element node. ' +
       'This is likely a bug in React.',
   );
-  listenToEvent(registrationName, ((rootContainerElement: any): Element));
+  listenToReactEvent(reactPropEvent, ((rootContainerElement: any): Element));
 }
 
 function getOwnerDocumentFromRootContainer(
@@ -350,7 +359,7 @@ function setInitialDOMProperties(
       // We could have excluded it in the property list instead of
       // adding a special case here, but then it wouldn't be emitted
       // on server rendering (but we *do* want to emit it in SSR).
-    } else if (registrationNameModules.hasOwnProperty(propKey)) {
+    } else if (registrationNameDependencies.hasOwnProperty(propKey)) {
       if (nextProp != null) {
         if (__DEV__ && typeof nextProp !== 'function') {
           warnForInvalidEventListener(propKey, nextProp);
@@ -688,7 +697,7 @@ export function diffProperties(
       // Noop
     } else if (propKey === AUTOFOCUS) {
       // Noop. It doesn't work on updates anyway.
-    } else if (registrationNameModules.hasOwnProperty(propKey)) {
+    } else if (registrationNameDependencies.hasOwnProperty(propKey)) {
       // This is a special case. If any listener updates we need to ensure
       // that the "current" fiber pointer gets updated so we need a commit
       // to update this element.
@@ -775,7 +784,7 @@ export function diffProperties(
       propKey === SUPPRESS_HYDRATION_WARNING
     ) {
       // Noop
-    } else if (registrationNameModules.hasOwnProperty(propKey)) {
+    } else if (registrationNameDependencies.hasOwnProperty(propKey)) {
       if (nextProp != null) {
         // We eagerly listen to this even though we haven't committed yet.
         if (__DEV__ && typeof nextProp !== 'function') {
@@ -972,7 +981,7 @@ export function diffHydratedProperties(
           updatePayload = [CHILDREN, '' + nextProp];
         }
       }
-    } else if (registrationNameModules.hasOwnProperty(propKey)) {
+    } else if (registrationNameDependencies.hasOwnProperty(propKey)) {
       if (nextProp != null) {
         if (__DEV__ && typeof nextProp !== 'function') {
           warnForInvalidEventListener(propKey, nextProp);
@@ -1261,7 +1270,9 @@ export function listenToEventResponderEventTypes(
           // existing passive event listener before we add the
           // active event listener.
           const passiveKey = targetEventType + '_passive';
-          const passiveItem = listenerMap.get(passiveKey);
+          const passiveItem = ((listenerMap.get(
+            passiveKey,
+          ): any): ElementListenerMapEntry | void);
           if (passiveItem !== undefined) {
             removeTrappedEventListener(
               document,

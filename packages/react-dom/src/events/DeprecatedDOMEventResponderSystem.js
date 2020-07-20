@@ -12,7 +12,7 @@ import {
   PASSIVE_NOT_SUPPORTED,
   RESPONDER_EVENT_SYSTEM,
 } from './EventSystemFlags';
-import type {AnyNativeEvent} from '../legacy-events/PluginModuleType';
+import type {AnyNativeEvent} from '../events/PluginModuleType';
 import {
   HostComponent,
   ScopeComponent,
@@ -25,7 +25,7 @@ import type {
   ReactDOMResponderContext,
   ReactDOMResponderEvent,
 } from '../shared/ReactDOMTypes';
-import type {DOMTopLevelEventType} from '../legacy-events/TopLevelEventTypes';
+import type {DOMTopLevelEventType} from '../events/TopLevelEventTypes';
 import {
   batchedEventUpdates,
   discreteUpdates,
@@ -56,6 +56,13 @@ import {
 // Intentionally not named imports because Rollup would use dynamic dispatch for
 // CommonJS interop named imports.
 import * as Scheduler from 'scheduler';
+
+import {
+  InputContinuousLanePriority,
+  getCurrentUpdateLanePriority,
+  setCurrentUpdateLanePriority,
+} from 'react-reconciler/src/ReactFiberLane';
+
 const {
   unstable_UserBlockingPriority: UserBlockingPriority,
   unstable_runWithPriority: runWithPriority,
@@ -101,9 +108,15 @@ const eventResponderContext: ReactDOMResponderContext = {
         break;
       }
       case UserBlockingEvent: {
-        runWithPriority(UserBlockingPriority, () =>
-          executeUserEventHandler(eventListener, eventValue),
-        );
+        const previousPriority = getCurrentUpdateLanePriority();
+        try {
+          setCurrentUpdateLanePriority(InputContinuousLanePriority);
+          runWithPriority(UserBlockingPriority, () =>
+            executeUserEventHandler(eventListener, eventValue),
+          );
+        } finally {
+          setCurrentUpdateLanePriority(previousPriority);
+        }
         break;
       }
       case ContinuousEvent: {

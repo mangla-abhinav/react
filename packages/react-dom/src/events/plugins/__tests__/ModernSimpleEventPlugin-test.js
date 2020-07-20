@@ -231,6 +231,8 @@ describe('SimpleEventPlugin', function() {
   describe('interactive events, in concurrent mode', () => {
     beforeEach(() => {
       jest.resetModules();
+
+      React = require('react');
       ReactDOM = require('react-dom');
       Scheduler = require('scheduler');
     });
@@ -238,7 +240,7 @@ describe('SimpleEventPlugin', function() {
     // @gate experimental
     it('flushes pending interactive work before extracting event handler', () => {
       container = document.createElement('div');
-      const root = ReactDOM.createRoot(container);
+      const root = ReactDOM.unstable_createRoot(container);
       document.body.appendChild(container);
 
       let button;
@@ -309,7 +311,7 @@ describe('SimpleEventPlugin', function() {
     // @gate experimental
     it('end result of many interactive updates is deterministic', () => {
       container = document.createElement('div');
-      const root = ReactDOM.createRoot(container);
+      const root = ReactDOM.unstable_createRoot(container);
       document.body.appendChild(container);
 
       let button;
@@ -377,11 +379,14 @@ describe('SimpleEventPlugin', function() {
             <button
               ref={el => (button = el)}
               onClick={() => {
-                Scheduler.unstable_next(() => {
-                  this.setState(state => ({
-                    lowPriCount: state.lowPriCount + 1,
-                  }));
-                });
+                React.unstable_withSuspenseConfig(
+                  () => {
+                    this.setState(state => ({
+                      lowPriCount: state.lowPriCount + 1,
+                    }));
+                  },
+                  {timeoutMs: 5000},
+                );
               }}>
               {text}
             </button>
@@ -408,7 +413,7 @@ describe('SimpleEventPlugin', function() {
       }
 
       // Initial mount
-      const root = ReactDOM.createRoot(container);
+      const root = ReactDOM.unstable_createRoot(container);
       root.render(<Wrapper />);
       expect(Scheduler).toFlushAndYield([
         'High-pri count: 0, Low-pri count: 0',

@@ -24,17 +24,26 @@ import type {FiberRoot} from './ReactInternalTypes';
 import type {OpaqueIDType} from './ReactFiberHostConfig';
 
 import ReactSharedInternals from 'shared/ReactSharedInternals';
-import {enableNewReconciler} from 'shared/ReactFeatureFlags';
+import {
+  enableDebugTracing,
+  enableSchedulingProfiler,
+  enableNewReconciler,
+} from 'shared/ReactFeatureFlags';
 
-import {NoMode, BlockingMode} from './ReactTypeOfMode';
+import {NoMode, BlockingMode, DebugTracingMode} from './ReactTypeOfMode';
 import {
   NoLane,
   NoLanes,
+  InputContinuousLanePriority,
   isSubsetOfLanes,
   mergeLanes,
   removeLanes,
   markRootEntangled,
   markRootMutableRead,
+  getCurrentUpdateLanePriority,
+  setCurrentUpdateLanePriority,
+  higherLanePriority,
+  DefaultLanePriority,
 } from './ReactFiberLane';
 import {readContext} from './ReactFiberNewContext.new';
 import {createDeprecatedResponderListener} from './ReactFiberDeprecatedEvents.new';
@@ -83,6 +92,8 @@ import {
   warnAboutMultipleRenderersDEV,
 } from './ReactMutableSource.new';
 import {getIsRendering} from './ReactCurrentFiber';
+import {logStateUpdateScheduled} from './DebugTracing';
+import {markStateUpdateScheduled} from './SchedulingProfiler';
 
 const {ReactCurrentDispatcher, ReactCurrentBatchConfig} = ReactSharedInternals;
 
@@ -1498,12 +1509,20 @@ function rerenderDeferredValue<T>(
 
 function startTransition(setPending, config, callback) {
   const priorityLevel = getCurrentPriorityLevel();
+  const previousLanePriority = getCurrentUpdateLanePriority();
+  setCurrentUpdateLanePriority(
+    higherLanePriority(previousLanePriority, InputContinuousLanePriority),
+  );
   runWithPriority(
     priorityLevel < UserBlockingPriority ? UserBlockingPriority : priorityLevel,
     () => {
       setPending(true);
     },
   );
+
+  // If there's no SuspenseConfig set, we'll use the DefaultLanePriority for this transition.
+  setCurrentUpdateLanePriority(DefaultLanePriority);
+
   runWithPriority(
     priorityLevel > NormalPriority ? NormalPriority : priorityLevel,
     () => {
@@ -1513,6 +1532,7 @@ function startTransition(setPending, config, callback) {
         setPending(false);
         callback();
       } finally {
+        setCurrentUpdateLanePriority(previousLanePriority);
         ReactCurrentBatchConfig.suspense = previousConfig;
       }
     },
@@ -1736,6 +1756,19 @@ function dispatchAction<S, A>(
       }
     }
     scheduleUpdateOnFiber(fiber, lane, eventTime);
+  }
+
+  if (__DEV__) {
+    if (enableDebugTracing) {
+      if (fiber.mode & DebugTracingMode) {
+        const name = getComponentName(fiber.type) || 'Unknown';
+        logStateUpdateScheduled(name, lane, action);
+      }
+    }
+  }
+
+  if (enableSchedulingProfiler) {
+    markStateUpdateScheduled(fiber, lane);
   }
 }
 
